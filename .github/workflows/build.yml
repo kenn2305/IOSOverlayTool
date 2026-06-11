@@ -39,7 +39,20 @@ jobs:
         echo "Theos directory contents:"
         ls -la $THEOS/
     
-    - name: Configure Build Environment
+    - name: List Available SDKs
+      run: |
+        echo "Available iOS SDKs:"
+        ls -la /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/ 2>/dev/null || echo "SDKs not found in expected location"
+        
+        echo ""
+        echo "Xcode path:"
+        xcode-select -p
+        
+        echo ""
+        echo "Available Xcode versions:"
+        ls -la /Applications/Xcode* 2>/dev/null || echo "Xcode not found"
+    
+    - name: Setup Build Environment
       run: |
         export THEOS=~/theos
         echo "THEOS_DEVICE_IP=localhost" >> $GITHUB_ENV

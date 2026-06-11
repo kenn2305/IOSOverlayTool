@@ -1,5 +1,5 @@
 export ARCHS = arm64
-export TARGET = iphone:clang:18.0:18.0
+export TARGET = iphone:clang:latest:15.0
 
 THEOS_MAKE_PATH ?= $(THEOS)/makefiles
 
