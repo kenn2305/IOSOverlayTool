@@ -82,32 +82,49 @@ jobs:
         echo "Starting OverlayImage build..."
         echo "================================"
         echo "THEOS: $THEOS"
-        echo "PATH: $PATH"
         echo "Current directory: $(pwd)"
-        echo ""
         
-        echo "Step 1: Running make clean..."
+        echo ""
+        echo "Step 1: Clean previous build..."
         make clean || true
         
         echo ""
-        echo "Step 2: Running make (verbose)..."
-        make VERBOSE=1 2>&1 | tee build.log || {
-          echo "ERROR: Build failed!"
-          echo ""
-          echo "Last 100 lines of build output:"
-          tail -100 build.log || cat build.log
+        echo "Step 2: Build OverlayImage tweak..."
+        make 2>&1 | tee build.log || {
+          echo "ERROR: Make failed!"
+          tail -50 build.log
           exit 1
         }
         
         echo ""
-        echo "Step 3: Running make package..."
-        make package FINALPACKAGE=1 VERBOSE=1 2>&1 | tee package.log || {
-          echo "ERROR: Package creation failed!"
-          echo ""
-          echo "Last 50 lines of package output:"
-          tail -50 package.log || cat package.log
+        echo "Step 3: Create packages directory..."
+        mkdir -p packages
+        
+        echo ""
+        echo "Step 4: Package .deb file..."
+        make package FINALPACKAGE=1 2>&1 | tee package.log || {
+          echo "ERROR: Package failed!"
+          tail -50 package.log
           exit 1
         }
+        
+        echo ""
+        echo "Step 5: Verify build artifacts..."
+        if [ -f ".theos/obj/iphoneos-arm64/OverlayImage.deb" ]; then
+          echo "✓ Found .deb in .theos/obj/iphoneos-arm64/"
+          cp .theos/obj/iphoneos-arm64/OverlayImage.deb packages/OverlayImage_1.0_iphoneos-arm64.deb
+          ls -lah packages/
+        elif find . -name "*.deb" -type f 2>/dev/null | grep -q .; then
+          echo "✓ Found .deb files:"
+          find . -name "*.deb" -type f
+          find . -name "*.deb" -type f -exec cp {} packages/ \;
+        else
+          echo "✗ No .deb file found!"
+          echo "Directory structure:"
+          find . -type d | head -20
+          find . -name "*.o" -o -name "*.m" -type f | head -20
+          exit 1
+        fi
         
         echo ""
         echo "Build completed successfully!"
