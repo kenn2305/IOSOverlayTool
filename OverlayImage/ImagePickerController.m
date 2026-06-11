@@ -18,16 +18,29 @@
 }
 
 - (void)present {
-    // Request photo library access
-    [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite completionHandler:^(PHAuthorizationStatus status) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (status != PHAuthorizationStatusDenied && status != PHAuthorizationStatusRestricted) {
-                [self presentPicker];
-            } else {
-                [self.delegate imagePickerControllerDidCancel];
-            }
-        });
-    }];
+    // Request photo library access with proper availability check
+    if (@available(iOS 14.0, *)) {
+        [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite completionHandler:^(PHAuthorizationStatus status) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (status != PHAuthorizationStatusDenied && status != PHAuthorizationStatusRestricted) {
+                    [self presentPicker];
+                } else {
+                    [self.delegate imagePickerControllerDidCancel];
+                }
+            });
+        }];
+    } else {
+        // Fallback for iOS 13 and earlier
+        [PHPhotoLibrary requestAuthorizationWithCompletionHandler:^(PHAuthorizationStatus status) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (status != PHAuthorizationStatusDenied && status != PHAuthorizationStatusRestricted) {
+                    [self presentPicker];
+                } else {
+                    [self.delegate imagePickerControllerDidCancel];
+                }
+            });
+        }];
+    }
 }
 
 - (void)presentPicker {
