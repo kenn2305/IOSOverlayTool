@@ -9,11 +9,6 @@
         self.backgroundColor = [UIColor clearColor];
         self.opaque = NO;
         self.tapThroughEnabled = YES;
-        
-        // Enable high-frequency touch delivery for smooth 120 FPS support
-        if (@available(iOS 13.4, *)) {
-            self.windowScene.windows;  // Ensure we're registered as top window
-        }
     }
     return self;
 }
