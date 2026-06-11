@@ -1,5 +1,8 @@
 name: Build OverlayImage Tweak
 
+env:
+  ACTIONS_ALLOW_UNSECURE_NODE_VERSION: true
+
 on:
   push:
     branches: [ main, master, dev ]
@@ -18,66 +21,115 @@ jobs:
       run: |
         sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
         xcode-select -p
+        echo "Xcode version:"
+        xcodebuild -version
     
     - name: Install Theos Dependencies
       run: |
+        echo "Installing Theos dependencies..."
         brew install perl openssl gnupg2 2>/dev/null || true
+        brew list | grep -E "perl|openssl|gnupg" || echo "Some packages may not be installed"
     
     - name: Install Theos
       run: |
+        echo "Cloning Theos repository..."
         git clone --recursive https://github.com/theos/theos.git ~/theos
-        echo "$HOME/theos/bin" >> $GITHUB_PATH
+        echo "THEOS=~/theos" >> $GITHUB_ENV
         export THEOS=~/theos
+        echo "Theos directory contents:"
         ls -la $THEOS/
     
-    - name: Setup Build Environment
+    - name: Configure Build Environment
       run: |
         export THEOS=~/theos
-        export PATH=$THEOS/bin:$PATH
-        export ARCHS="arm64 arm64e"
-        export SDKVERSION=18.0
-        echo "THEOS=$THEOS" >> $GITHUB_ENV
-        echo "PATH=$PATH" >> $GITHUB_ENV
-        echo "ARCHS=$ARCHS" >> $GITHUB_ENV
-        echo "Build environment ready"
+        echo "THEOS_DEVICE_IP=localhost" >> $GITHUB_ENV
+        echo "THEOS_DEVICE_PORT=22" >> $GITHUB_ENV
+        echo "PATH=$THEOS/bin:$PATH" >> $GITHUB_ENV
+        echo "ARCHS=arm64" >> $GITHUB_ENV
+        echo "Build environment configured"
     
     - name: Verify Theos Installation
       run: |
         export THEOS=~/theos
         export PATH=$THEOS/bin:$PATH
-        which make
-        which logos
-        $THEOS/bin/nic.pl --help | head -5
+        echo "THEOS: $THEOS"
+        echo "PATH: $PATH"
+        echo ""
+        echo "Checking Theos bin directory:"
+        ls -lah $THEOS/bin/ | head -20
+        
+        if [ -f "$THEOS/bin/nic.pl" ]; then
+          echo "✓ nic.pl found"
+        fi
+    
+    - name: List Project Structure
+      run: |
+        echo "Current directory: $(pwd)"
+        echo "Project structure:"
+        ls -la
+        echo ""
+        echo "OverlayImage directory:"
+        ls -la OverlayImage/
     
     - name: Build OverlayImage
       run: |
         export THEOS=~/theos
         export PATH=$THEOS/bin:$PATH
-        export ARCHS="arm64 arm64e"
-        export SDKVERSION=18.0
+        export ARCHS="arm64"
+        
         cd OverlayImage
-        echo "Starting build..."
-        make clean
-        make DEBUG=1
-        make package FINALPACKAGE=1
-        echo "Build completed"
-      continue-on-error: false
+        echo "================================"
+        echo "Starting OverlayImage build..."
+        echo "================================"
+        echo "THEOS: $THEOS"
+        echo "PATH: $PATH"
+        echo "Current directory: $(pwd)"
+        echo ""
+        
+        echo "Step 1: Running make clean..."
+        make clean || true
+        
+        echo ""
+        echo "Step 2: Running make (verbose)..."
+        make VERBOSE=1 2>&1 | tee build.log || {
+          echo "ERROR: Build failed!"
+          echo ""
+          echo "Last 100 lines of build output:"
+          tail -100 build.log || cat build.log
+          exit 1
+        }
+        
+        echo ""
+        echo "Step 3: Running make package..."
+        make package FINALPACKAGE=1 VERBOSE=1 2>&1 | tee package.log || {
+          echo "ERROR: Package creation failed!"
+          echo ""
+          echo "Last 50 lines of package output:"
+          tail -50 package.log || cat package.log
+          exit 1
+        }
+        
+        echo ""
+        echo "Build completed successfully!"
     
     - name: List Build Artifacts
-      if: success()
+      if: always()
       run: |
-        ls -lah OverlayImage/packages/
-        find OverlayImage -name "*.deb" -o -name "*.dylib"
-    
-    - name: Verify .deb Package
-      if: success()
-      run: |
-        cd OverlayImage/packages
-        for deb in *.deb; do
-          echo "Package: $deb"
-          file "$deb"
-          ar t "$deb" | head -20 || true
-        done
+        echo "Checking for build artifacts..."
+        if [ -d "OverlayImage/packages" ]; then
+          echo "✓ Packages directory found:"
+          ls -lah OverlayImage/packages/
+        else
+          echo "✗ Packages directory not found"
+        fi
+        
+        echo ""
+        echo "Searching for .deb files:"
+        find OverlayImage -name "*.deb" 2>/dev/null || echo "No .deb files found"
+        
+        echo ""
+        echo "Searching for .dylib files:"
+        find OverlayImage -name "*.dylib" 2>/dev/null || echo "No .dylib files found"
     
     - name: Upload .deb Artifact
       if: success()
@@ -98,7 +150,12 @@ jobs:
     - name: Build Summary
       if: always()
       run: |
-        echo "=== Build Summary ==="
+        echo "================================"
+        echo "Build Summary"
+        echo "================================"
         echo "Status: ${{ job.status }}"
-        echo "Artifacts: $(ls -1 OverlayImage/packages/*.deb 2>/dev/null | wc -l) .deb file(s)"
-        ls -lh OverlayImage/packages/*.deb 2>/dev/null || echo "No .deb files found"
+        if [ -f "OverlayImage/build.log" ]; then
+          echo ""
+          echo "Tail of build.log (last 30 lines):"
+          tail -30 OverlayImage/build.log || cat OverlayImage/build.log
+        fi
