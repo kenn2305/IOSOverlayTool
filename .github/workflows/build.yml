@@ -14,30 +14,73 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
     
+    - name: Setup Xcode
+      run: |
+        sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+        xcode-select -p
+    
+    - name: Install Theos Dependencies
+      run: |
+        brew install perl openssl gnupg2 2>/dev/null || true
+    
     - name: Install Theos
       run: |
         git clone --recursive https://github.com/theos/theos.git ~/theos
         echo "$HOME/theos/bin" >> $GITHUB_PATH
+        export THEOS=~/theos
+        ls -la $THEOS/
     
-    - name: Setup environment
+    - name: Setup Build Environment
       run: |
         export THEOS=~/theos
+        export PATH=$THEOS/bin:$PATH
+        export ARCHS="arm64 arm64e"
+        export SDKVERSION=18.0
         echo "THEOS=$THEOS" >> $GITHUB_ENV
-        echo "$THEOS/bin:$PATH" >> $GITHUB_PATH
+        echo "PATH=$PATH" >> $GITHUB_ENV
+        echo "ARCHS=$ARCHS" >> $GITHUB_ENV
+        echo "Build environment ready"
+    
+    - name: Verify Theos Installation
+      run: |
+        export THEOS=~/theos
+        export PATH=$THEOS/bin:$PATH
+        which make
+        which logos
+        $THEOS/bin/nic.pl --help | head -5
     
     - name: Build OverlayImage
       run: |
         export THEOS=~/theos
         export PATH=$THEOS/bin:$PATH
+        export ARCHS="arm64 arm64e"
+        export SDKVERSION=18.0
         cd OverlayImage
+        echo "Starting build..."
         make clean
-        make package
+        make DEBUG=1
+        make package FINALPACKAGE=1
+        echo "Build completed"
+      continue-on-error: false
     
-    - name: List artifacts
+    - name: List Build Artifacts
+      if: success()
       run: |
         ls -lah OverlayImage/packages/
+        find OverlayImage -name "*.deb" -o -name "*.dylib"
+    
+    - name: Verify .deb Package
+      if: success()
+      run: |
+        cd OverlayImage/packages
+        for deb in *.deb; do
+          echo "Package: $deb"
+          file "$deb"
+          ar t "$deb" | head -20 || true
+        done
     
     - name: Upload .deb Artifact
+      if: success()
       uses: actions/upload-artifact@v3
       with:
         name: OverlayImage-deb
@@ -45,9 +88,17 @@ jobs:
         retention-days: 30
     
     - name: Create Release on Tag
-      if: startsWith(github.ref, 'refs/tags/v')
+      if: startsWith(github.ref, 'refs/tags/v') && success()
       uses: softprops/action-gh-release@v1
       with:
         files: OverlayImage/packages/*.deb
         draft: false
         prerelease: false
+    
+    - name: Build Summary
+      if: always()
+      run: |
+        echo "=== Build Summary ==="
+        echo "Status: ${{ job.status }}"
+        echo "Artifacts: $(ls -1 OverlayImage/packages/*.deb 2>/dev/null | wc -l) .deb file(s)"
+        ls -lh OverlayImage/packages/*.deb 2>/dev/null || echo "No .deb files found"

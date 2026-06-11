@@ -1,0 +1,53 @@
+name: Build OverlayImage Tweak
+
+on:
+  push:
+    branches: [ main, master, dev ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Install Theos
+      run: |
+        git clone --recursive https://github.com/theos/theos.git ~/theos
+        echo "$HOME/theos/bin" >> $GITHUB_PATH
+    
+    - name: Setup environment
+      run: |
+        export THEOS=~/theos
+        echo "THEOS=$THEOS" >> $GITHUB_ENV
+        echo "$THEOS/bin:$PATH" >> $GITHUB_PATH
+    
+    - name: Build OverlayImage
+      run: |
+        export THEOS=~/theos
+        export PATH=$THEOS/bin:$PATH
+        cd OverlayImage
+        make clean
+        make package
+    
+    - name: List artifacts
+      run: |
+        ls -lah OverlayImage/packages/
+    
+    - name: Upload .deb Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: OverlayImage-deb
+        path: OverlayImage/packages/*.deb
+        retention-days: 30
+    
+    - name: Create Release on Tag
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: OverlayImage/packages/*.deb
+        draft: false
+        prerelease: false
